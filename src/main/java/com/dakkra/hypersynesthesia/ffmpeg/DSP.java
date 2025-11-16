@@ -1,6 +1,7 @@
 package com.dakkra.hypersynesthesia.ffmpeg;
 
 import com.tambapps.fft4j.FastFouriers;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -16,17 +17,21 @@ class DSP {
     public void processLight(int[] samples) {
         final int fftSize = samples.length;
 
-        for (int sample : samples) {
-            if (Math.abs(sample) > peakLoudness) {
-                peakLoudness = Math.abs(sample);
+        double sum = 0;
+
+        for (int i = 0; i < fftSize; i++) {
+            int sample = samples[i];
+
+            int absSample = Math.abs(sample);
+            if (absSample > peakLoudness) {
+                peakLoudness = absSample;
             }
+
+            // Calculate RMS
+            double d = sample;
+            sum += d * d;
         }
 
-        // Calculate RMS
-        double sum = 0;
-        for (int sample : samples) {
-            sum += ((double) sample * (double) sample);
-        }
         rms = Math.sqrt(sum / fftSize);
     }
 
@@ -52,31 +57,33 @@ class DSP {
         FastFouriers.BASIC.transform(real, imag, outputReal, outputImag);
 
         // Create spectrum
-        spectrum = new double[fftSize / 2];
+        // In the future HS may have customizable FFT size
+        spectrum = new double[(int) Math.floor(fftSize / 2)];
 
         final int halfFftSize = spectrum.length;
 
         for (int i = 0; i < halfFftSize; i++) {
-            final double realValue = outputReal[i];
-            final double imagValue = outputImag[i];
+            double realValue = outputReal[i];
+            double imagValue = outputImag[i];
 
             spectrum[i] = Math.sqrt(realValue * realValue + imagValue * imagValue);
         }
 
         // Remove bottom few ~buckets~ FFT bin
         int skippedBuckets = 4;
-        spectrum = Arrays.copyOfRange(spectrum, skippedBuckets, spectrum.length);
+        spectrum = Arrays.copyOfRange(spectrum, skippedBuckets, halfFftSize);
 
-        // Convert to dB is redundant
-        /*
-         * for (int i = 0; i < halfFftSize; i++) {
-         * spectrum[i] = 20 * Math.log10(spectrum[i]);
-         * }
-         */
+        // Convert to dB
+
+        for (int i = 0; i < halfFftSize; i++) {
+            spectrum[i] = 20 * Math.log10(spectrum[i]);
+        }
 
         // Compute max
         double max = 0;
-        for (double value : spectrum) {
+        for (int i = 0; i < halfFftSize; i++) {
+            double value = spectrum[i];
+
             if (value > max) {
                 max = value;
             }
@@ -100,7 +107,9 @@ class DSP {
 
         // Compute max again
         max = 0;
-        for (double value : spectrum) {
+        for (int i = 0; i < halfFftSize; i++) {
+            double value = spectrum[i];
+
             if (value > max) {
                 max = value;
             }
@@ -125,11 +134,11 @@ class DSP {
     }
 
     public double getRMSLoudness() {
-        return rms / (double) Integer.MAX_VALUE;
+        return (double) rms / Integer.MAX_VALUE;
     }
 
     public double getPeakLoudness() {
-        return (double) peakLoudness / (double) Integer.MAX_VALUE;
+        return (double) peakLoudness / Integer.MAX_VALUE;
     }
 
     public void reset() {
