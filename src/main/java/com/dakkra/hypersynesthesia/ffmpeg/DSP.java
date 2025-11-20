@@ -2,7 +2,6 @@ package com.dakkra.hypersynesthesia.ffmpeg;
 
 import com.tambapps.fft4j.FastFouriers;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 
 class DSP {
@@ -13,13 +12,15 @@ class DSP {
 
     private double[] spectrum = null;
 
+    // private boolean interleavedEffect = false;
+
     // Skips the fft
     public void processLight(int[] samples) {
-        final int fftSize = samples.length;
+        final int samplesLength = samples.length;
 
         double sum = 0;
 
-        for (int i = 0; i < fftSize; i++) {
+        for (int i = 0; i < samplesLength; i++) {
             int sample = samples[i];
 
             int absSample = Math.abs(sample);
@@ -32,7 +33,7 @@ class DSP {
             sum += d * d;
         }
 
-        rms = Math.sqrt(sum / fftSize);
+        rms = Math.sqrt(sum / samplesLength);
     }
 
     public void processFull(int[] samples) {
@@ -62,6 +63,25 @@ class DSP {
 
         final int halfFftSize = spectrum.length;
 
+        // Keep this if HS will add "Interleaved effect" in the future
+        /*
+         * if (interleavedEffect) {
+         * double[] realTemp = Arrays.copyOfRange(outputReal, 0, halfFftSize);
+         * double[] imagTemp = Arrays.copyOfRange(outputImag, 0, halfFftSize);
+         * 
+         * for (int i = 0; i < halfFftSize; i++) {
+         * double realValue = realTemp[i];
+         * double realValueShifted = realTemp[i + 1];
+         * double imagValue = imagTemp[i];
+         * 
+         * int i2 = i * 2;
+         * outputReal[i2] = Math.sqrt(realValueShifted * realValueShifted + imagValue *
+         * imagValue);
+         * outputImag[i2 + 1] = Math.sqrt(realValue * realValue + imagValue *
+         * imagValue);
+         * }
+         * }
+         */
         for (int i = 0; i < halfFftSize; i++) {
             double realValue = outputReal[i];
             double imagValue = outputImag[i];
@@ -69,12 +89,10 @@ class DSP {
             spectrum[i] = Math.sqrt(realValue * realValue + imagValue * imagValue);
         }
 
-        // Remove bottom few ~buckets~ FFT bin
         int skippedBuckets = 4;
         spectrum = Arrays.copyOfRange(spectrum, skippedBuckets, halfFftSize);
 
         // Convert to dB
-
         for (int i = 0; i < halfFftSize; i++) {
             spectrum[i] = 20 * Math.log10(spectrum[i]);
         }
@@ -90,30 +108,26 @@ class DSP {
         }
 
         // Expand spectrum
+        // Precompute scaled max value
+        double scaledMax = max * 0.85;
         for (int i = 0; i < halfFftSize; i++) {
-            spectrum[i] = spectrum[i] - 0.85 * max;
+            spectrum[i] -= scaledMax;
         }
 
-        // ~Remove negative values~
-        // `spectrum` array always have positive values because we square real and imag
-        // values
+        // ~~Compute max again~~
+        // spectrum[] is scaled so do the max value
+        max -= scaledMax;
+
         /*
+         * max = 0;
          * for (int i = 0; i < halfFftSize; i++) {
-         * if (spectrum[i] < 0) {
-         * spectrum[i] = 0;
+         * double value = spectrum[i];
+         * 
+         * if (value > max) {
+         * max = value;
          * }
          * }
          */
-
-        // Compute max again
-        max = 0;
-        for (int i = 0; i < halfFftSize; i++) {
-            double value = spectrum[i];
-
-            if (value > max) {
-                max = value;
-            }
-        }
 
         // Normalize spectrum
         for (int i = 0; i < halfFftSize; i++) {
